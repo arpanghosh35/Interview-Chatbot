@@ -1,36 +1,61 @@
-
 import { v4 as uuidv4 } from "uuid";
-import { getSession } from "./memory.js";
 import { createInterviewAgent } from "./technical.js";
+import Session from "./model/Session.js";
 
-export const startConversation=(req,res)=>{
-     const { company } = req.body;
+/* =========================
+   START CONVERSATION
+========================= */
 
-  const sessionId = uuidv4();
-  const session = getSession(sessionId);
+export const startConversation = async (req, res) => {
+  try {
+    const { company } = req.body;
 
-  session.company = company || "General";
+    const sessionId = uuidv4();
 
-  res.json({
-    message: "Interview session started",
-    sessionId
-  });
-}
+    const newSession = new Session({
+      _id: sessionId, // UUID as primary key
+      company: company || "General",
+      history: [],
+      questionCount: 0
+    });
 
-export const createInterview=async(req,res)=>{
-    try {
+    await newSession.save();
+
+    res.json({
+      message: "Interview session started",
+      sessionId
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to start session" });
+  }
+};
+
+
+/* =========================
+   CREATE INTERVIEW (CHAT)
+========================= */
+
+export const createInterview = async (req, res) => {
+  try {
     const { sessionId, message } = req.body;
 
     if (!sessionId || !message) {
       return res.status(400).json({ error: "sessionId and message required" });
     }
 
-    const session = getSession(sessionId);
+    const session = await Session.findById(sessionId);
+
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
     const agent = createInterviewAgent(session.company);
 
-    // Build conversation history
+    // Build previous conversation text
     const historyText = session.history
-      .map(item => `User: ${item.user}\nAI: ${item.ai}`)
+      .map(item => `${item.role === "user" ? "User" : "AI"}: ${item.message}`)
       .join("\n");
 
     const finalPrompt = `
@@ -40,15 +65,23 @@ ${historyText}
 User: ${message}
 `;
 
-   const aiReply = await agent.ask(finalPrompt);
+    const aiReply = await agent.ask(finalPrompt);
 
-    // Save history
+    // Save user message
     session.history.push({
-      user: message,
-      ai: aiReply
+      role: "user",
+      message: message
+    });
+
+    // Save AI reply
+    session.history.push({
+      role: "assistant",
+      message: aiReply
     });
 
     session.questionCount++;
+
+    await session.save();
 
     res.json({
       reply: aiReply,
@@ -59,36 +92,66 @@ User: ${message}
     console.error(error);
     res.status(500).json({ error: "Interview processing failed" });
   }
-}
+};
 
-export const generateReport=(req,res)=>{
-     const { sessionId } = req.body;
 
-  const session = getSession(sessionId);
+/* =========================
+   GENERATE REPORT
+========================= */
 
-  res.json({
-    message: "Interview Ended",
-    totalQuestions: session.questionCount,
-    fullConversation: session.history
-  });
-}
+export const generateReport = async (req, res) => {
+  try {
+    const { sessionId } = req.body;
 
-export const chatHistory=(req,res)=>{
-          const { sessionId } = req.params;
+    const session = await Session.findById(sessionId);
 
-  const session = getSession(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
 
-  if (!session) {
-    return res.status(404).json({ error: "Session not found" });
+    res.json({
+      message: "Interview Ended",
+      totalQuestions: session.questionCount,
+      fullConversation: session.history
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to generate report" });
   }
+};
 
-  res.json({
-    company: session.company,
-    totalQuestions: session.questionCount,
-    history: session.history
-  });
-}
 
+/* =========================
+   GET CHAT HISTORY
+========================= */
+
+export const chatHistory = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await Session.findById(sessionId);
+
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    res.json({
+      company: session.company,
+      totalQuestions: session.questionCount,
+      history: session.history
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch history" });
+  }
+};
+
+
+/* =========================
+   ASK TECHNICAL QUESTION (Standalone)
+========================= */
 
 export const askTechnicalQuestion = async (req, res) => {
   try {
