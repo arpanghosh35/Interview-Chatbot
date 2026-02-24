@@ -56,32 +56,41 @@ function App() {
   };
 
   const startInterview = async () => {
-    if (!company) return alert("Enter company name");
+  if (!company) {
+    alert("Enter company name");
+    return;
+  }
 
-    try {
-      const res = await axios.post(
-        "http://localhost:5000/api/interview/start",
-        { company }
-      );
+  try {
+    const res = await axios.post(
+      "http://localhost:5000/api/interview/start",
+      { company }
+    );
 
-      const newSessionId = res.data.sessionId;
-      setSessionId(newSessionId);
-      setMode("interview");
-      const greeting = `Hello! Welcome to your ${company} technical interview. Let's get started.`;
-      setChat([{ role: "ai", text: greeting }]);
+    const newSessionId = res.data.sessionId;
 
-      setTimeout(async () => {
-        const firstQuestion =
-          "Can you explain the concept of Operating System?";
-        await askBotQuestion(newSessionId, firstQuestion);
-      }, 1200);
+    setSessionId(newSessionId);
+    setMode("interview");
 
-      loadSessions(); // 🆕 refresh sidebar
-    } catch (error) {
-      console.error(error);
-      alert("Failed to start interview");
-    }
-  };
+    const firstQuestionRes = await axios.post(
+      "http://localhost:5000/api/interview/chat",
+      {
+        sessionId: newSessionId,
+        message: "Begin the interview and ask Question 1 immediately."
+      }
+    );
+
+    setChat([
+      { role: "ai", text: firstQuestionRes.data.reply }
+    ]);
+
+    loadSessions();
+
+  } catch (error) {
+    console.error(error);
+    alert("Failed to start interview");
+  }
+};
 
   const sendMessage = async () => {
 

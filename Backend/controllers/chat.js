@@ -65,6 +65,9 @@ User: ${message}
 `;
 
     const aiReply = await agent.ask(finalPrompt);
+    let userMessage = message;
+
+
 
     // Save user message
     session.history.push({
